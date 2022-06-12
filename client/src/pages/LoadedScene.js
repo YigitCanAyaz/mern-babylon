@@ -14,6 +14,8 @@ var file;
 
 export const LoadedScene = (props) => {
 
+    document.body.style.overflow = "hidden";
+
     let { _id } = useParams();
     let [scene, setScene] = useState(null);
     let [content, setContent] = useState(null);

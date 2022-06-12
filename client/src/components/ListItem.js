@@ -20,7 +20,7 @@ let getFilePath = (scene) => {
 
 const ListItem = ({ scene }) => {
     return (
-        <div className="col text-center mt-5">
+        <div className="col text-center mt-5 mb-5">
             <div className="card">
                 <div className="card-header">{getName(scene)}</div>
                 <img src={require("../assets/babylon-small-img.png")} className="card-img-top" alt="..." style={{ "height": "200px" }} />

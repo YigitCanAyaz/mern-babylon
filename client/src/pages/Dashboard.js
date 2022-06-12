@@ -6,6 +6,8 @@ import { Link } from 'react-router-dom';
 
 export const Dashboard = () => {
 
+    document.body.style.removeProperty('overflow');
+
     let [scenes, setScenes] = useState([]);
 
     useEffect(() => {

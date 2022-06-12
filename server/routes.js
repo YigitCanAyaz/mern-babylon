@@ -26,10 +26,28 @@ module.exports = function (app) {
     });
 
     app.post("/createScene", async (req, res) => {
+        let updated = false;
+        var newScene;
         const scene = req.body;
-        const newScene = new SceneModel(scene);
-        await newScene.save();
-
-        res.json(scene);
+        console.log(scene);
+        fs.unlink(scene.filePath, function (err) {
+            if (err) {
+                console.log("file hasn't exists")
+            }
+            // if no error, file has been deleted successfully
+            else {
+                console.log('File deleted!');
+                SceneModel.find({ filePath: scene.filePath }).remove().then(() => {
+                    newScene = new SceneModel(scene);
+                    newScene.save();
+                    updated = true;
+                })
+            }
+        });
+        if (updated === false) {
+            newScene = await new SceneModel(scene);
+            await newScene.save();
+        }
+        res.json(newScene);
     });
 }

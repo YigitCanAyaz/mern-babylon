@@ -23,8 +23,34 @@ var fileBabylonName;
 var blob;
 var file;
 var filePath;
+var camera;
+var light;
+var colorMaterial;
+var flag = false;
+var count = 2;
+var gizmo;
+var utilLayer;
+var myScene;
+var colorPicker;
+var renderer;
+var depthMap;
+var buffer;
+var ray;
+var rayHelper;
+var objectUrl;
+var rayFlag = false;
+var date;
+var currentMeshParent;
+var cameraFollow;
+var currentMesh;
+var serializedScene;
+var strScene;
+var serializedAnimationSceneFlag = false;
+var newModel = false;
 
 export const LoadedEditorScene = (props) => {
+
+    document.body.style.overflow = "hidden";
 
     let { _id } = useParams();
     let [scene, setScene] = useState(null);
@@ -39,16 +65,19 @@ export const LoadedEditorScene = (props) => {
     let getScene = async () => {
         Axios.get(`http://localhost:3001/getScenes/${_id}`).then((response) => {
             setScene(response.data.result);
+            console.log('result', response.data.result)
+            console.log('content', response.data.content)
             setContent(response.data.content);
             blob = new Blob([response.data.content]);
             file = new File([blob], response.data.result.name)
             filePath = response.data.result.filePath;
             console.log(blob);
             console.log(file);
+            console.log('filePath', filePath);
             url = URL.createObjectURL(file)
-            console.log(url)
+            console.log('url', url)
             fileBabylonName = response.data.result.name;
-            console.log(fileBabylonName)
+            console.log('fileBabylonName', fileBabylonName)
         }).then(() => {
             BABYLON.SceneLoader.Append(
                 url,
@@ -56,11 +85,8 @@ export const LoadedEditorScene = (props) => {
                 myScene,
                 function (scene) {
                     let mesh = myScene.meshes[count];
-                    let meshParent = mesh.getChildMeshes()[0];
-                    mesh.position = new BABYLON.Vector3(-6, 0, 0);
-
-                    var gltfMesh = mesh;
-                    boundingBox =
+                    var gltfMesh = mesh.parent;
+                    var boundingBox =
                         BABYLON.BoundingBoxGizmo.MakeNotPickableAndWrapInBoundingBox(gltfMesh);
 
                     // Create bounding box gizmo
@@ -148,26 +174,6 @@ const onRender = (scene) => {
     // }
 };
 
-let box;
-var camera;
-var light;
-var colorMaterial;
-var flag = false;
-var count = 2;
-var gizmo;
-var utilLayer;
-var boundingBox;
-var myScene;
-var colorPicker;
-var renderer;
-var depthMap;
-var buffer;
-var ray;
-var rayHelper;
-var objectUrl;
-var rayFlag = false;
-var date;
-
 let firstAnimationPosition, firstAnimationRotation;
 let secondAnimationPosition, secondAnimationRotation;
 let thirdAnimationPosition, thirdAnimationRotation;
@@ -180,29 +186,27 @@ const handleModelSelect = (evt) => {
         while (dropDownList.options.length > 0) {
             dropDownList.remove(0);
         }
-        myScene.getMeshByName("box").dispose();
-        gizmo.dispose();
-        utilLayer.dispose();
-        boundingBox.dispose();
     }
     console.log(evt.target.files);
     var files = evt.target.files;
     console.log(files[0]);
     const url = URL.createObjectURL(files[0]);
     console.log(url);
-    count = 14;
 
     BABYLON.SceneLoader.Append(
         url,
         "",
         myScene,
         function (scene) {
+            console.log('scene', scene);
             let mesh = myScene.meshes[count];
-            let meshParent = mesh.getChildMeshes()[0];
-            mesh.position = new BABYLON.Vector3(-6, 0, 0);
-
+            scene.stopAnimation(mesh);
+            count = myScene.meshes.length + 1;
+            console.log('count', count);
+            console.log('mesh', mesh);
+            // let meshParent = mesh.getChildMeshes()[0];
             var gltfMesh = mesh;
-            boundingBox =
+            var boundingBox =
                 BABYLON.BoundingBoxGizmo.MakeNotPickableAndWrapInBoundingBox(gltfMesh);
 
             // Create bounding box gizmo
@@ -218,15 +222,7 @@ const handleModelSelect = (evt) => {
             boundingBox.addBehavior(dragobserver);
 
             boundingBox.rotationQuaternion = new BABYLON.Quaternion();
-            const dropDownList = document.getElementById("meshDropDown");
-
-            mesh.getChildMeshes().forEach((childMeshes) => {
-                var option = document.createElement("option");
-                option.value = childMeshes.id;
-                option.text =
-                    childMeshes.id.charAt(0).toUpperCase() + childMeshes.id.slice(1);
-                dropDownList.appendChild(option);
-            });
+            camera.setPosition(mesh.position);
         },
         null,
         null,
@@ -237,7 +233,6 @@ const handleModelSelect = (evt) => {
 const handleTextureSelect = (evt) => {
     let files = evt.target.files;
     let url = URL.createObjectURL(files[0]);
-    // let mesh = scene.meshes[count];
     var textureMaterial = new BABYLON.StandardMaterial(
         "textureMaterial",
         myScene
@@ -253,24 +248,33 @@ const saveSameSceneButton = () => {
         window.URL.revokeObjectURL(objectUrl);
     }
 
-    var serializedScene = BABYLON.SceneSerializer.Serialize(myScene);
+    if (serializedAnimationSceneFlag === false) {
+        serializedScene = BABYLON.SceneSerializer.Serialize(myScene);
 
-    var strScene = JSON.stringify(serializedScene);
+        strScene = JSON.stringify(serializedScene);
+    }
+
+    var newBlob = new Blob([strScene], { type: "octet/stream" });
 
     // turn blob into an object URL; saved as a member, so can be cleaned out later
-    objectUrl = (window.webkitURL || window.URL).createObjectURL(blob);
+    objectUrl = (window.webkitURL || window.URL).createObjectURL(newBlob);
 
-    var link = window.document.createElement("a");
-    console.log('objecturl', objectUrl);
-    link.href = objectUrl;
-    link.download = fileBabylonName;
-    var click = document.createEvent("MouseEvents");
-    click.initEvent("click", true, false);
-    link.dispatchEvent(click);
+    console.log('objecturl', objectUrl)
 
     date = new Date();
 
-    Axios.post("http://localhost:3001/createScene", { fileBabylonName, filePath, date });
+    const name = fileBabylonName;
+
+    Axios.post("http://localhost:3001/createScene", { name, filePath, date }).then((result) => {
+        console.log('result', result);
+        var link = window.document.createElement("a");
+        console.log('objecturl', objectUrl);
+        link.href = objectUrl;
+        link.download = result.data.name;
+        var click = document.createEvent("MouseEvents");
+        click.initEvent("click", true, false);
+        link.dispatchEvent(click);
+    });
 }
 
 const changeColorOfMesh = () => {
@@ -284,8 +288,9 @@ const changeColorOfMesh = () => {
 };
 
 const toggleFirstAnimationButton = () => {
-    let mesh = boundingBox;
-    var eular = boundingBox.rotationQuaternion.toEulerAngles();
+    console.log('currentMeshParent', currentMeshParent);
+    let mesh = currentMeshParent;
+    var eular = currentMeshParent.rotationQuaternion.toEulerAngles();
     firstAnimationPosition = new BABYLON.Vector3(
         mesh.position.x,
         mesh.position.y,
@@ -297,8 +302,9 @@ const toggleFirstAnimationButton = () => {
 };
 
 const toggleSecondAnimationButton = () => {
-    let mesh = boundingBox;
-    var eular = boundingBox.rotationQuaternion.toEulerAngles();
+    console.log('currentMeshParent', currentMeshParent);
+    let mesh = currentMeshParent;
+    var eular = currentMeshParent.rotationQuaternion.toEulerAngles();
     secondAnimationPosition = new BABYLON.Vector3(
         mesh.position.x,
         mesh.position.y,
@@ -310,8 +316,9 @@ const toggleSecondAnimationButton = () => {
 };
 
 const toggleThirdAnimationButton = () => {
-    let mesh = boundingBox;
-    var eular = boundingBox.rotationQuaternion.toEulerAngles();
+    console.log('currentMeshParent', currentMeshParent);
+    let mesh = currentMeshParent;
+    var eular = currentMeshParent.rotationQuaternion.toEulerAngles();
     thirdAnimationPosition = new BABYLON.Vector3(
         mesh.position.x,
         mesh.position.y,
@@ -323,6 +330,13 @@ const toggleThirdAnimationButton = () => {
 };
 
 const makeAnimation = () => {
+
+    serializedScene = BABYLON.SceneSerializer.Serialize(myScene);
+
+    strScene = JSON.stringify(serializedScene);
+
+    serializedAnimationSceneFlag = true;
+
     const frameRate = 10;
 
     var animationPosition = new BABYLON.Animation(
@@ -333,7 +347,7 @@ const makeAnimation = () => {
         BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT
     );
 
-    const animationRotation = new BABYLON.Animation(
+    var animationRotation = new BABYLON.Animation(
         "animationRotation",
         "rotation",
         frameRate,
@@ -392,7 +406,7 @@ const makeAnimation = () => {
 
     animationRotation.setKeys(keyFramesRotation);
 
-    let mesh = boundingBox;
+    let mesh = currentMeshParent;
 
     mesh.animations = [];
     mesh.animations.push(animationPosition);
@@ -427,7 +441,7 @@ const onSceneReady = async (scene) => {
     GLTFFileLoader.IncrementalLoading = false;
 
     myScene.environmentTexture = BABYLON.CubeTexture.CreateFromPrefilteredData(
-        "https://playground.babylonjs.com/textures/country.env",
+        "https://playground.babylonjs.com//textures/country.env",
         myScene
     );
     myScene.createDefaultSkybox(myScene.environmentTexture);
@@ -455,4 +469,46 @@ const onSceneReady = async (scene) => {
     );
 
     light.intensity = 0.7;
+    colorMaterial = new BABYLON.StandardMaterial("colorMaterial", myScene);
+    colorPicker = document.getElementById("colorPicker");
+    colorPicker.value = colorMaterial.diffuseColor;
+
+    renderer = myScene.enableDepthRenderer(camera, false);
+    depthMap = renderer.getDepthMap();
+    buffer = new Float32Array(
+        4 * depthMap.getSize().width * depthMap.getSize().height
+    );
+
+    myScene.onPointerDown = (evt, pickResult) => {
+        if (pickResult.hit) {
+            const dropDownList = document.getElementById("meshDropDown");
+
+            while (dropDownList.options.length > 0) {
+                dropDownList.remove(0);
+            }
+
+            console.log('pickedMesh', pickResult.pickedMesh);
+
+            currentMesh = pickResult.pickedMesh;
+
+            console.log('currentMesh', currentMesh);
+
+            while (currentMesh.parent !== null) {
+                currentMesh = currentMesh.parent;
+                console.log('going to parent...', currentMesh)
+            }
+            currentMeshParent = currentMesh;
+            currentMesh = currentMesh.getChildMeshes()[0];
+            console.log('currentMeshName', currentMesh);
+            console.log('currentMeshParentName', currentMeshParent);
+
+            currentMeshParent.getChildMeshes().forEach((childMeshes) => {
+                var option = document.createElement("option");
+                option.value = childMeshes.id;
+                option.text =
+                    childMeshes.id.charAt(0).toUpperCase() + childMeshes.id.slice(1);
+                dropDownList.appendChild(option);
+            });
+        }
+    }
 };

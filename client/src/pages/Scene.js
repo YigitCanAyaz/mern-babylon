@@ -12,12 +12,12 @@ import { FirstAnimationButton } from "../components/buttons/FirstAnimationButton
 import { SecondAnimationButton } from "../components/buttons/SecondAnimationButton";
 import { ThirdAnimationButton } from "../components/buttons/ThirdAnimationButton";
 import { PlayAnimationButton } from "../components/buttons/PlayAnimationButton";
-import { circleOfConfusionPixelShader } from "@babylonjs/core/Shaders/circleOfConfusion.fragment";
+// import { circleOfConfusionPixelShader } from "@babylonjs/core/Shaders/circleOfConfusion.fragment";
 import { MeshHiddenButton } from "../components/buttons/MeshHiddenButton";
 import { SaveSceneButton } from "../components/buttons/SaveSceneButton";
 import Axios from "axios";
 
-let box;
+// let box;
 var camera;
 var light;
 var colorMaterial;
@@ -25,7 +25,6 @@ var flag = false;
 var count = 1;
 var gizmo;
 var utilLayer;
-var boundingBox;
 var myScene;
 var colorPicker;
 var renderer;
@@ -37,19 +36,28 @@ var objectUrl;
 var filePath;
 var rayFlag = false;
 var date;
+var currentMeshParent;
+var cameraFollow;
+var currentMesh;
+var serializedScene;
+var strScene;
+var serializedAnimationSceneFlag = false;
 
 let firstAnimationPosition, firstAnimationRotation;
 let secondAnimationPosition, secondAnimationRotation;
 let thirdAnimationPosition, thirdAnimationRotation;
 
 const onSceneReady = async (scene) => {
+
+  document.body.style.overflow = "hidden";
+
   myScene = scene;
 
   GLTFFileLoader.IncrementalLoading = false;
 
   myScene.environmentTexture = BABYLON.CubeTexture.CreateFromPrefilteredData(
     "https://playground.babylonjs.com//textures/country.env",
-    scene
+    myScene
   );
   myScene.createDefaultSkybox(myScene.environmentTexture);
 
@@ -86,15 +94,30 @@ const onSceneReady = async (scene) => {
     4 * depthMap.getSize().width * depthMap.getSize().height
   );
 
-  BABYLON.SceneLoader.Append(
-    "https://punkoffice.com/cybertruck/assets/",
-    "cybertruck.glb",
-    scene,
-    function (scene) {
-      let mesh = myScene.meshes[count];
-      mesh.position = new BABYLON.Vector3(10, 0, 0);
+  myScene.onPointerDown = (evt, pickResult) => {
+    if (pickResult.hit) {
+      const dropDownList = document.getElementById("meshDropDown");
+
+      while (dropDownList.options.length > 0) {
+        dropDownList.remove(0);
+      }
+
+      currentMesh = pickResult.pickedMesh.getChildMeshes()[0];
+      currentMeshParent = currentMesh.parent;
+
+      console.log(currentMesh);
+
+      currentMesh.getChildMeshes().forEach((childMeshes) => {
+        var option = document.createElement("option");
+        option.value = childMeshes.id;
+        option.text =
+          childMeshes.id.charAt(0).toUpperCase() + childMeshes.id.slice(1);
+        dropDownList.appendChild(option);
+      });
     }
-  );
+  }
+
+
 };
 
 const handleModelSelect = (evt) => {
@@ -105,29 +128,27 @@ const handleModelSelect = (evt) => {
     while (dropDownList.options.length > 0) {
       dropDownList.remove(0);
     }
-    myScene.getMeshByName("box").dispose();
-    gizmo.dispose();
-    utilLayer.dispose();
-    boundingBox.dispose();
   }
   console.log(evt.target.files);
   var files = evt.target.files;
   console.log(files[0]);
   const url = URL.createObjectURL(files[0]);
   console.log(url);
-  count = 13;
 
   BABYLON.SceneLoader.Append(
     url,
     "",
     myScene,
     function (scene) {
+      console.log('scene', scene);
       let mesh = myScene.meshes[count];
-      let meshParent = mesh.getChildMeshes()[0];
-      mesh.position = new BABYLON.Vector3(-6, 0, 0);
-
+      scene.stopAnimation(mesh);
+      count = myScene.meshes.length + 1;
+      console.log('count', count);
+      console.log('mesh', mesh);
+      // let meshParent = mesh.getChildMeshes()[0];
       var gltfMesh = mesh;
-      boundingBox =
+      var boundingBox =
         BABYLON.BoundingBoxGizmo.MakeNotPickableAndWrapInBoundingBox(gltfMesh);
 
       // Create bounding box gizmo
@@ -143,15 +164,16 @@ const handleModelSelect = (evt) => {
       boundingBox.addBehavior(dragobserver);
 
       boundingBox.rotationQuaternion = new BABYLON.Quaternion();
-      const dropDownList = document.getElementById("meshDropDown");
+      camera.setPosition(mesh.position);
+      // const dropDownList = document.getElementById("meshDropDown");
 
-      mesh.getChildMeshes().forEach((childMeshes) => {
-        var option = document.createElement("option");
-        option.value = childMeshes.id;
-        option.text =
-          childMeshes.id.charAt(0).toUpperCase() + childMeshes.id.slice(1);
-        dropDownList.appendChild(option);
-      });
+      // mesh.getChildMeshes().forEach((childMeshes) => {
+      //   var option = document.createElement("option");
+      //   option.value = childMeshes.id;
+      //   option.text =
+      //     childMeshes.id.charAt(0).toUpperCase() + childMeshes.id.slice(1);
+      //   dropDownList.appendChild(option);
+      // });
     },
     null,
     null,
@@ -179,9 +201,11 @@ const saveSceneButton = (name) => {
     window.URL.revokeObjectURL(objectUrl);
   }
 
-  var serializedScene = BABYLON.SceneSerializer.Serialize(myScene);
+  if (serializedAnimationSceneFlag === false) {
+    serializedScene = BABYLON.SceneSerializer.Serialize(myScene);
 
-  var strScene = JSON.stringify(serializedScene);
+    strScene = JSON.stringify(serializedScene);
+  }
 
   if (name.toLowerCase().lastIndexOf(".babylon") !== name.length - 8 || name.length < 9) {
     name += ".babylon";
@@ -219,8 +243,9 @@ const changeColorOfMesh = () => {
 };
 
 const toggleFirstAnimationButton = () => {
-  let mesh = boundingBox;
-  var eular = boundingBox.rotationQuaternion.toEulerAngles();
+  console.log('currentMeshParent', currentMeshParent);
+  let mesh = currentMeshParent;
+  var eular = currentMeshParent.rotationQuaternion.toEulerAngles();
   firstAnimationPosition = new BABYLON.Vector3(
     mesh.position.x,
     mesh.position.y,
@@ -232,8 +257,9 @@ const toggleFirstAnimationButton = () => {
 };
 
 const toggleSecondAnimationButton = () => {
-  let mesh = boundingBox;
-  var eular = boundingBox.rotationQuaternion.toEulerAngles();
+  console.log('currentMeshParent', currentMeshParent);
+  let mesh = currentMeshParent;
+  var eular = currentMeshParent.rotationQuaternion.toEulerAngles();
   secondAnimationPosition = new BABYLON.Vector3(
     mesh.position.x,
     mesh.position.y,
@@ -245,8 +271,9 @@ const toggleSecondAnimationButton = () => {
 };
 
 const toggleThirdAnimationButton = () => {
-  let mesh = boundingBox;
-  var eular = boundingBox.rotationQuaternion.toEulerAngles();
+  console.log('currentMeshParent', currentMeshParent);
+  let mesh = currentMeshParent;
+  var eular = currentMeshParent.rotationQuaternion.toEulerAngles();
   thirdAnimationPosition = new BABYLON.Vector3(
     mesh.position.x,
     mesh.position.y,
@@ -258,6 +285,13 @@ const toggleThirdAnimationButton = () => {
 };
 
 const makeAnimation = () => {
+
+  serializedScene = BABYLON.SceneSerializer.Serialize(myScene);
+
+  strScene = JSON.stringify(serializedScene);
+
+  serializedAnimationSceneFlag = true;
+
   const frameRate = 10;
 
   var animationPosition = new BABYLON.Animation(
@@ -268,7 +302,7 @@ const makeAnimation = () => {
     BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT
   );
 
-  const animationRotation = new BABYLON.Animation(
+  var animationRotation = new BABYLON.Animation(
     "animationRotation",
     "rotation",
     frameRate,
@@ -327,7 +361,7 @@ const makeAnimation = () => {
 
   animationRotation.setKeys(keyFramesRotation);
 
-  let mesh = boundingBox;
+  let mesh = currentMeshParent;
 
   mesh.animations = [];
   mesh.animations.push(animationPosition);
@@ -366,23 +400,22 @@ const onRender = (scene) => {
 };
 
 export default () => (
-
   <div className="d-flex" id="wrapper">
     <div className="border-end bg-white" id="sidebar-wrapper"></div>
     <div className="border-end bg-white" id="sidebar-wrapper">
       <div className="sidebar-heading border-bottom bg-light text-center">Options:</div>
       <div className="list-group list-group-flush">
-        <a className="list-group-item list-group-item-action list-group-item-light p-3"><ModelHandler modelHandler={handleModelSelect} /></a>
-        <a className="list-group-item list-group-item-action list-group-item-light p-3"><TextureHandler textureHandler={handleTextureSelect} /></a>
-        <a className="list-group-item list-group-item-action list-group-item-light p-3"><FirstAnimationButton firstAnimationButton={toggleFirstAnimationButton}
-        /></a>
-        <a className="list-group-item list-group-item-action list-group-item-light p-3"><SecondAnimationButton secondAnimationButton={toggleSecondAnimationButton}
-        /></a>
-        <a className="list-group-item list-group-item-action list-group-item-light p-3"><ThirdAnimationButton thirdAnimationButton={toggleThirdAnimationButton}
-        /></a>
-        <a className="list-group-item list-group-item-action list-group-item-light p-3"><PlayAnimationButton playAnimationButton={makeAnimation} /></a>
-        <a className="list-group-item list-group-item-action list-group-item-light p-3"><MeshHiddenButton meshHiddenButton={meshHiddenButton} /></a>
-        <a className="list-group-item list-group-item-action list-group-item-light p-3 mt-2"><SaveSceneButton saveSceneButton={saveSceneButton} /></a>
+        <div className="list-group-item list-group-item-action list-group-item-light p-3"><ModelHandler modelHandler={handleModelSelect} /></div>
+        <div className="list-group-item list-group-item-action list-group-item-light p-3"><TextureHandler textureHandler={handleTextureSelect} /></div>
+        <div className="list-group-item list-group-item-action list-group-item-light p-3"><FirstAnimationButton firstAnimationButton={toggleFirstAnimationButton}
+        /></div>
+        <div className="list-group-item list-group-item-action list-group-item-light p-3"><SecondAnimationButton secondAnimationButton={toggleSecondAnimationButton}
+        /></div>
+        <div className="list-group-item list-group-item-action list-group-item-light p-3"><ThirdAnimationButton thirdAnimationButton={toggleThirdAnimationButton}
+        /></div>
+        <div className="list-group-item list-group-item-action list-group-item-light p-3"><PlayAnimationButton playAnimationButton={makeAnimation} /></div>
+        <div className="list-group-item list-group-item-action list-group-item-light p-3"><MeshHiddenButton meshHiddenButton={meshHiddenButton} /></div>
+        <div className="list-group-item list-group-item-action list-group-item-light p-3 mt-2"><SaveSceneButton saveSceneButton={saveSceneButton} /></div>
       </div>
     </div>
     <div>
